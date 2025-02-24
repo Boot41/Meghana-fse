@@ -1,0 +1,476 @@
+.chatbot-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #f5f5f5;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  max-width: 80%;
+  padding: 10px 15px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.message.user {
+  align-self: flex-end;
+  background-color: #007bff;
+  color: white;
+}
+
+.message.bot {
+  align-self: flex-start;
+  background-color: white;
+  color: #333;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.message-content {
+  word-wrap: break-word;
+}
+
+.message-timestamp {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  align-self: flex-end;
+  margin-top: 4px;
+}
+
+.message.bot .message-timestamp {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.chat-input {
+  display: flex;
+  gap: 10px;
+  padding: 15px;
+  background-color: white;
+  border-top: 1px solid #eee;
+}
+
+.chat-input textarea {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  resize: none;
+  font-size: 14px;
+  outline: none;
+}
+
+.chat-input button {
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.chat-input button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  background-color: #90949c;
+  border-radius: 50%;
+  animation: typing 1s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+/* Itinerary Styles */
+.itinerary-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: white;
+  border-radius: 8px;
+  margin-top: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+
+.itinerary-summary {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.itinerary-summary h3 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+}
+
+.itinerary-summary p {
+  color: #5c6b7a;
+  line-height: 1.6;
+}
+
+.weather-summary {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.weather-summary h4 {
+  color: #1976d2;
+  margin-bottom: 15px;
+  font-size: 1.3em;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weather-summary p {
+  font-size: 1.1em;
+  line-height: 1.8;
+  white-space: pre-line;
+  color: #2c3e50;
+  margin: 0;
+}
+
+.weather-info {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  padding: 15px;
+  margin: 15px 0;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.weather-info .weather-icon {
+  font-size: 2em;
+  color: #1976d2;
+}
+
+.weather-info .weather-details {
+  flex: 1;
+}
+
+.weather-info .weather-details p {
+  margin: 4px 0;
+  color: #2c3e50;
+}
+
+.weather-info .weather-details p.condition {
+  font-weight: 600;
+  font-size: 1.1em;
+  color: #1976d2;
+}
+
+.weather-info .weather-details p.recommendation {
+  color: #5c6b7a;
+  font-style: italic;
+}
+
+.weather-note {
+  background: rgba(25, 118, 210, 0.05);
+  border-left: 3px solid #1976d2;
+  padding: 12px 15px;
+  margin-top: 12px !important;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.95em;
+  color: #2c3e50 !important;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.weather-note i {
+  color: #1976d2;
+  font-size: 1.1em;
+}
+
+.day-plan {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.day-plan h4 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+  font-size: 1.3em;
+  border-bottom: 2px solid #e0e6ed;
+  padding-bottom: 10px;
+}
+
+.activities {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.activity {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 15px;
+  padding: 15px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.activity:last-child {
+  border-bottom: none;
+}
+
+.activity-time {
+  color: #3498db;
+  font-weight: 600;
+  font-size: 0.9em;
+  padding-top: 3px;
+}
+
+.activity-details h5 {
+  color: #2c3e50;
+  margin: 0 0 8px 0;
+  font-size: 1.1em;
+}
+
+.activity-details p {
+  color: #5c6b7a;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.travel-tips {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.travel-tips h4 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+}
+
+.travel-tips ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.travel-tips li {
+  padding: 8px 0;
+  color: #5c6b7a;
+  display: flex;
+  align-items: flex-start;
+}
+
+.travel-tips li:before {
+  content: "💡";
+  margin-right: 10px;
+}
+
+.itinerary-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+}
+
+.send-email-button {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: background 0.3s ease;
+}
+
+.send-email-button:hover {
+  background: #2980b9;
+}
+
+.email-form-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.email-form-modal {
+  background-color: white;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 400px;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.email-form-modal h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.email-form-modal input[type="email"] {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 20px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color 0.3s;
+}
+
+.email-form-modal input[type="email"]:focus {
+  outline: none;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+}
+
+.email-form-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.email-form-buttons button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.email-form-buttons .send-button {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.email-form-buttons .cancel-button {
+  background-color: #f44336;
+  color: white;
+}
+
+.email-form-buttons button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.email-form-buttons button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.email-section {
+  margin-top: 20px;
+  padding: 15px;
+  border-top: 1px solid #eee;
+}
+
+.email-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.email-form input[type="email"] {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.email-form input[type="email"]:focus {
+  outline: none;
+  border-color: #4CAF50;
+}
+
+.email-form button {
+  padding: 8px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.email-form button:first-of-type {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.email-form button:last-of-type {
+  background-color: #f44336;
+  color: white;
+}
+
+.email-form button:hover {
+  opacity: 0.9;
+}
+
+.email-form button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}

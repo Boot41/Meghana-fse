@@ -1,498 +1,556 @@
+import os
+import re
 import json
-from datetime import datetime
-from typing import Dict, List, Optional
 import requests
-from django.conf import settings
+import logging
+import random
+from typing import Dict, List, Optional, Any
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class TravelPlannerService:
-    def __init__(self):
-        self.api_base_url = settings.OPENTRIP_API_URL
-        self.api_key = settings.OPENTRIP_API_KEY
+    """Service for planning travel itineraries using RapidAPI."""
+    
+    STATES = {
+        'INITIAL': 'initial',
+        'LOCATION': 'location',
+        'TRANSPORT': 'transport',
+        'ACTIVITY': 'activity',
+        'BUDGET': 'budget',
+        'DURATION': 'duration',
+        'FOOD_PREFERENCE': 'food_preference',
+        'FINAL': 'final'
+    }
 
-    def extract_travel_params(self, user_message: str) -> Dict:
-        """
-        Extract travel parameters from user's natural language input
-        Returns a dictionary with extracted parameters
-        """
-        # In a real implementation, this would use NLP to extract parameters
-        # For now, we'll use basic string matching
-        params = {
-            'duration': None,
-            'location': None,
-            'preferences': [],
-            'budget_level': None
+    def __init__(self, api_key: str):
+        """Initialize the service with API key."""
+        self.api_key = api_key
+        self.base_url = "https://travel-advisor.p.rapidapi.com"
+        self.headers = {
+            'X-RapidAPI-Key': api_key,
+            'X-RapidAPI-Host': 'travel-advisor.p.rapidapi.com'
         }
-        
-        message = user_message.lower()
-        
-        # Extract duration (assuming format: "X-day" or "X day")
-        import re
-        duration_match = re.search(r'(\d+)[ -]day', message)
-        if duration_match:
-            params['duration'] = int(duration_match.group(1))
-            
-        # Extract location (assuming it's a capitalized word not at the start)
-        words = user_message.split()
-        for word in words:
-            if word[0].isupper() and words.index(word) != 0:
-                params['location'] = word
-                break
-                
-        # Extract preferences
-        preference_keywords = {
-            'budget': 'budget_friendly',
-            'luxury': 'luxury',
-            'sightseeing': 'sightseeing',
-            'culture': 'cultural',
-            'food': 'culinary',
-            'adventure': 'adventure',
-            'outdoor': 'outdoor'
-        }
-        
-        for keyword, pref in preference_keywords.items():
-            if keyword in message:
-                params['preferences'].append(pref)
-                
-        # Determine budget level
-        budget_keywords = {
-            'budget': 'low',
-            'cheap': 'low',
-            'luxury': 'high',
-            'expensive': 'high',
-            'moderate': 'medium',
-            'mid': 'medium'
-        }
-        
-        for keyword, level in budget_keywords.items():
-            if keyword in message:
-                params['budget_level'] = level
-                break
-                
-        return params
+        logger.info("✅ Initialized TravelPlannerService with RapidAPI")
 
-    def generate_itinerary(self, params: Dict) -> Dict:
-        """
-        Generate a travel itinerary using OpenTripPlanner API and enhance with Groq
-        """
+    def determine_conversation_state(self, user_message: str, current_state: Dict) -> Dict:
+        """Determine the next conversation state based on user input."""
         try:
-            print(f"Received params: {params}")
+            # Initialize state if empty
+            if not current_state:
+                current_state = {
+                    'state': 'START',
+                    'message': "Hi! Where would you like to go?"
+                }
             
-            # Validate required parameters
-            if not params.get('destination'):
-                return {"error": "Destination is required"}
-            if not params.get('duration'):
-                return {"error": "Duration is required"}
+            current_state_name = current_state.get('state', 'START')
             
-            # Convert form data to internal format
-            internal_params = {
-                'destination': params.get('destination', ''),
-                'duration': int(params.get('duration', 0)),
-                'interests': params.get('interests', []),
-                'budget': params.get('budget', 'medium'),
-                'dates': params.get('travelDates', ''),
-                'style': params.get('travelStyle', 'balanced')
-            }
-            
-            print(f"Internal params: {internal_params}")
-            
-            # Generate basic itinerary with Groq
-            from .groq_service import GroqService
-            groq = GroqService()
-            
-            # Create the basic prompt
-            prompt = f"Create a {internal_params['duration']}-day travel itinerary for {internal_params['destination']}. "
-            if internal_params['interests']:
-                prompt += f"Include activities related to: {', '.join(internal_params['interests'])}. "
-            prompt += f"Budget level: {internal_params['budget']}. Travel style: {internal_params['style']}. "
-            
-            # Add structure requirements
-            prompt += "\nFormat the response as a JSON object with this exact structure:"
-            prompt += "\n{"
-            prompt += "\n  \"days\": {"
-            prompt += "\n    \"day_1\": [{"
-            prompt += "\n      \"name\": \"Activity name\","
-            prompt += "\n      \"description\": \"Detailed description\","
-            prompt += "\n      \"location\": \"Location details\","
-            prompt += "\n      \"duration\": \"Estimated duration\","
-            prompt += "\n      \"cost_estimate\": \"Cost range\","
-            prompt += "\n      \"best_time\": \"Best time to visit\","
-            prompt += "\n      \"weather_alternatives\": [\"Alt 1\", \"Alt 2\"],"
-            prompt += "\n      \"local_tips\": [\"Tip 1\", \"Tip 2\"]"
-            prompt += "\n    }]"
-            prompt += "\n  }"
-            prompt += "\n}"
-            
-            # Try to get itinerary from OpenTripPlanner first
-            try:
-                planner_data = self._get_opentrip_itinerary(internal_params)
-                print(f"OpenTripPlanner data: {planner_data}")
-            except Exception as e:
-                print(f"OpenTripPlanner error: {str(e)}")
-                planner_data = None
+            # State machine transitions
+            if current_state_name == 'START':
+                # Extract location from user message
+                location = user_message.strip()
                 
-            # Now use Groq to enhance or create the itinerary
-            from .groq_service import GroqService
-            groq = GroqService()
-            
-            if planner_data:
-                # Create prompt to enhance OpenTripPlanner data
-                prompt = self._create_enhancement_prompt(planner_data, internal_params)
-            else:
-                # Create prompt for basic itinerary
-                prompt = self._create_basic_prompt(internal_params)
+                # Validate location
+                if len(location) < 3 or any(greeting in location.lower() for greeting in ['hi', 'hello', 'hey']):
+                    return {
+                        'state': 'START',
+                        'message': "Please enter a valid destination city or country. For example: 'Paris' or 'Japan'"
+                    }
                 
-            # Get enhanced/generated itinerary from Groq
-            result = groq.generate_travel_suggestions(prompt)
-            
-            # Check for errors
-            if "error" in result:
-                return result
+                return {
+                    'state': 'DURATION',
+                    'location': location,
+                    'message': f"Great choice! How many days would you like to spend in {location}?"
+                }
                 
-            # Format the response
+            elif current_state_name == 'DURATION':
+                try:
+                    # Extract duration from user message
+                    duration = int(''.join(filter(str.isdigit, user_message)))
+                    if duration < 1 or duration > 14:
+                        return {
+                            **current_state,
+                            'message': "Please enter a duration between 1 and 14 days."
+                        }
+                    
+                    return {
+                        **current_state,
+                        'state': 'BUDGET',
+                        'duration': duration,
+                        'message': "What's your budget level? (low/medium/high)"
+                    }
+                except ValueError:
+                    return {
+                        **current_state,
+                        'message': "Please enter a number for the duration (e.g., '3 days' or just '3')."
+                    }
+                
+            elif current_state_name == 'BUDGET':
+                # Extract budget from user message
+                budget = user_message.lower().strip()
+                if budget not in ['low', 'medium', 'high']:
+                    return {
+                        **current_state,
+                        'message': "Please specify your budget as 'low', 'medium', or 'high'."
+                    }
+                
+                return {
+                    **current_state,
+                    'state': 'ACTIVITY',
+                    'budget': budget,
+                    'message': "What kind of activities interest you? (e.g., culture, food, adventure, shopping, nature)"
+                }
+                
+            elif current_state_name == 'ACTIVITY':
+                # Extract activity type from user message
+                activity_type = user_message.lower().strip()
+                include_food = 'food' in activity_type
+                
+                return {
+                    **current_state,
+                    'state': 'FINAL',
+                    'activity_type': activity_type,
+                    'include_food': include_food
+                }
+            
+            # Default case
+            return current_state
+            
+        except Exception as e:
+            logger.error(f"Error in conversation state machine: {str(e)}")
             return {
-                "summary": f"{internal_params['duration']}-day itinerary for {internal_params['destination']}",
-                "overview": {
-                    "destination": internal_params['destination'],
-                    "duration": internal_params['duration'],
-                    "interests": internal_params['interests'],
-                    "budget": internal_params['budget'],
-                    "style": internal_params['style']
-                },
-                "days": result.get("days", {})
+                'state': 'START',
+                'message': "I encountered an error. Let's start over. Where would you like to go?"
             }
-            try:
-                from .groq_service import GroqService
-                groq = GroqService()
-                prompt = self._create_enhancement_prompt(planner_data, internal_params)
-                enhanced_data = groq.generate_travel_suggestions(prompt)
-                print(f"Groq enhancement: {enhanced_data}")
-            except Exception as e:
-                print(f"Groq enhancement error: {str(e)}")
-                enhanced_data = planner_data.get('basic_plan', '')
-            
-            # Structure the final itinerary
-            return self._structure_enhanced_itinerary(planner_data, enhanced_data, internal_params)
-            
-        except ValueError as e:
-            error_msg = str(e)
-            print(f"Validation error: {error_msg}")
-            return {"error": error_msg}
-        except Exception as e:
-            error_msg = f"Failed to generate itinerary: {str(e)}"
-            print(f"Unexpected error: {error_msg}")
-            return {"error": error_msg}
-                
-        except Exception as e:
-            # Handle all errors gracefully
-            return self._generate_fallback_response(params, str(e))
 
-    def _structure_itinerary(self, raw_itinerary: Dict, duration: int) -> Dict:
-        """
-        Structure the raw API response into a user-friendly format
-        """
-        structured_itinerary = {
-            "summary": f"{duration}-day personalized itinerary",
-            "days": []
-        }
-
-        # Process each day's activities
-        for day in range(duration):
-            day_activities = raw_itinerary.get(f'day_{day+1}', [])
-            
-            structured_day = {
-                "day_number": day + 1,
-                "theme": self._get_day_theme(day_activities),
-                "activities": self._format_activities(day_activities)
-            }
-            
-            structured_itinerary["days"].append(structured_day)
-
-        return structured_itinerary
-
-    def _get_day_theme(self, activities: List) -> str:
-        """
-        Generate a theme for the day based on activities
-        """
-        # This would be more sophisticated in production
-        themes = {
-            "sightseeing": "🏛️ Cultural Exploration",
-            "outdoor": "🌲 Outdoor Adventure",
-            "food": "🍜 Culinary Journey",
-            "shopping": "🛍️ Shopping & Local Markets",
-            "relaxation": "🌅 Relaxation & Wellness"
-        }
-        
-        # Default theme if we can't determine one
-        return themes.get("sightseeing")
-
-    def _format_activities(self, activities: List) -> List[Dict]:
-        """
-        Format raw activities into structured format
-        """
-        formatted = []
-        for activity in activities:
-            formatted.append({
-                "name": activity.get("name", ""),
-                "description": activity.get("description", ""),
-                "duration": activity.get("duration", ""),
-                "cost_estimate": activity.get("cost", ""),
-                "location": activity.get("location", ""),
-                "tips": activity.get("tips", [])
-            })
-        return formatted
-
-    def _generate_fallback_response(self, params: Dict, error: str) -> Dict:
-        """
-        Generate a fallback response when API fails
-        """
-        return {
-            "error": "Unable to fetch real-time itinerary",
-            "fallback": {
-                "message": "Here's a general suggestion based on your preferences",
-                "suggestion": self._generate_generic_suggestion(params)
-            }
-        }
-
-    def _generate_generic_suggestion(self, params: Dict) -> str:
-        """
-        Generate a generic suggestion when API is unavailable
-        """
-        location = params.get('location', 'your destination')
-        duration = params.get('duration', 'your trip')
-        preferences = params.get('preferences', [])
-        
-        suggestion = f"For your {duration}-day trip to {location}, I recommend:\n"
-        
-        if 'sightseeing' in preferences:
-            suggestion += "- Visit main tourist attractions in the morning\n"
-        if 'food' in preferences:
-            suggestion += "- Explore local restaurants and food markets\n"
-        if 'culture' in preferences:
-            suggestion += "- Experience local cultural activities\n"
-        
-        return suggestion
-        
-    def _get_opentrip_itinerary(self, params: Dict) -> Dict:
-        """Get initial itinerary from OpenTripPlanner API via RapidAPI"""
+    def extract_location(self, message: str) -> Optional[str]:
+        """Extract location from message"""
         try:
-            endpoint = f"{self.api_base_url}/plan"
-            headers = {
-                "X-RapidAPI-Key": self.api_key,
-                "X-RapidAPI-Host": "opentripplanner1.p.rapidapi.com",
-                "Content-Type": "application/json"
+            logger.info(f"Extracting location from: '{message}'")
+            
+            # Common Indian cities with variations
+            indian_cities = {
+                'bangalore': 'Bangalore',
+                'bengaluru': 'Bangalore',
+                'delhi': 'Delhi',
+                'new delhi': 'Delhi',
+                'mumbai': 'Mumbai',
+                'bombay': 'Mumbai',
+                'chennai': 'Chennai',
+                'madras': 'Chennai',
+                'kolkata': 'Kolkata',
+                'calcutta': 'Kolkata',
+                'hyderabad': 'Hyderabad',
+                'pune': 'Pune',
+                'ahmedabad': 'Ahmedabad',
+                'jaipur': 'Jaipur',
+                'goa': 'Goa'
             }
             
-            # Format parameters for OpenTripPlanner API
-            api_params = {
-                "destination": params['destination'],
-                "duration": params['duration'],
-                "preferences": params['interests'],
-                "budget": params['budget'],
-                "dates": params['dates'],
-                "style": params['style']
+            # First check if any city name is directly mentioned
+            message_lower = message.lower().strip()
+            logger.info(f"Normalized message: '{message_lower}'")
+            
+            # Direct city match
+            for city_variant, standard_name in indian_cities.items():
+                if city_variant in message_lower:
+                    logger.info(f"Found direct city match: {standard_name}")
+                    return standard_name
+            
+            # Check for cities with prepositions
+            prepositions = ['to', 'in', 'at', 'visit', 'going to', 'traveling to', 'travelling to']
+            words = message_lower.split()
+            
+            for i, word in enumerate(words):
+                if word in prepositions and i + 1 < len(words):
+                    next_word = words[i + 1]
+                    if next_word in indian_cities:
+                        logger.info(f"Found city after preposition: {indian_cities[next_word]}")
+                        return indian_cities[next_word]
+            
+            # If it's a single word that's not in our stop words
+            if len(words) == 1 and words[0] not in ['hi', 'hello', 'hey']:
+                logger.info("Single word input - checking if it's a city")
+                if words[0] in indian_cities:
+                    logger.info(f"Single word is a city: {indian_cities[words[0]]}")
+                    return indian_cities[words[0]]
+            
+            logger.info("No location found")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error in extract_location: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return None
+
+    def extract_transport_preference(self, message: str) -> Optional[str]:
+        """Extract transport preference from message"""
+        try:
+            transport_preferences = ['public', 'private', 'walking', 'mixed']
+            message_lower = message.lower()
+            for preference in transport_preferences:
+                if preference in message_lower:
+                    return preference
+            return None
+        except Exception as e:
+            logger.error(f"Error in extract_transport_preference: {str(e)}")
+            return None
+
+    def extract_activity_preference(self, message: str) -> Optional[str]:
+        """Extract activity preference from message"""
+        try:
+            activity_preferences = ['adventure', 'relaxing', 'cultural', 'mixed']
+            message_lower = message.lower()
+            for preference in activity_preferences:
+                if preference in message_lower:
+                    return preference
+            return None
+        except Exception as e:
+            logger.error(f"Error in extract_activity_preference: {str(e)}")
+            return None
+
+    def extract_budget_level(self, message: str) -> Optional[str]:
+        """Extract budget level from message"""
+        try:
+            budget_levels = ['low', 'medium', 'high']
+            message_lower = message.lower()
+            for level in budget_levels:
+                if level in message_lower:
+                    return level
+            return None
+        except Exception as e:
+            logger.error(f"Error in extract_budget_level: {str(e)}")
+            return None
+
+    def extract_duration(self, message: str) -> Optional[int]:
+        """Extract duration from message"""
+        try:
+            import re
+            match = re.search(r'(\d+)(?:\s*days?)?', message)
+            if match:
+                return int(match.group(1))
+            return None
+        except Exception as e:
+            logger.error(f"Error in extract_duration: {str(e)}")
+            return None
+
+    def extract_food_preference(self, message: str) -> Optional[bool]:
+        """Extract food preference from message"""
+        try:
+            message_lower = message.lower()
+            if 'yes' in message_lower:
+                return True
+            elif 'no' in message_lower:
+                return False
+            return None
+        except Exception as e:
+            logger.error(f"Error in extract_food_preference: {str(e)}")
+            return None
+
+    def get_travel_plan(
+        self,
+        destination: str,
+        duration: int,
+        budget: str,
+        activity_type: str,
+        include_food: bool = False,
+        weather_data: Dict = None
+    ) -> Dict:
+        """Get a travel plan for the specified destination."""
+        try:
+            logger.info(f"🌍 Getting travel plan for {destination} for {duration} days")
+            
+            # Validate inputs
+            if not destination:
+                raise ValueError("Destination is required")
+            if not duration or duration < 1:
+                raise ValueError("Duration must be at least 1 day")
+            if not budget in ['low', 'medium', 'high']:
+                budget = 'medium'  # Default to medium budget
+            
+            # Clean destination name
+            destination = destination.strip().lower()
+            
+            # Build the request URL
+            url = f"{self.base_url}/v1/places"
+            
+            # Prepare query parameters
+            querystring = {
+                "location": destination,
+                "limit": "30",
+                "offset": "0",
+                "radius": "5",
+                "language": "en",
+                "currency": "USD"
             }
             
-            print(f"Calling OpenTripPlanner API with params: {api_params}")
-            response = requests.post(endpoint, json=api_params, headers=headers)
-            response.raise_for_status()
+            logger.info(f"🔍 Searching for places in {destination}...")
             
+            # Make the API request
+            response = requests.get(
+                url,
+                headers=self.headers,
+                params=querystring,
+                timeout=10  # Add timeout
+            )
+            
+            # Check if request was successful
+            if response.status_code != 200:
+                logger.error(f"❌ API request failed with status {response.status_code}: {response.text}")
+                raise Exception(f"Failed to get places data: {response.text}")
+            
+            # Parse response
             data = response.json()
-            print(f"OpenTripPlanner API response: {data}")
-            return data
+            logger.info(f"✅ Found {len(data.get('data', []))} places")
+            
+            if not data.get('data'):
+                logger.warning(f"⚠️ No places found for {destination}")
+                return None
+            
+            # Process places data
+            places = data['data']
+            
+            # Group places by category
+            categorized_places = self._categorize_places(places)
+            
+            # Create daily itinerary
+            itinerary = []
+            
+            # Get weather data for each day if available
+            daily_weather = weather_data.get('daily', []) if weather_data else []
+            
+            for day in range(1, duration + 1):
+                # Get weather for this day
+                day_weather = daily_weather[day - 1] if day <= len(daily_weather) else None
+                
+                # Create activities for the day based on weather
+                activities = self._create_day_activities(
+                    categorized_places,
+                    activity_type,
+                    include_food,
+                    day_weather
+                )
+                
+                # Add day plan
+                day_plan = {
+                    'day': day,
+                    'activities': activities,
+                    'weather': day_weather
+                }
+                
+                itinerary.append(day_plan)
+            
+            logger.info(f"✅ Successfully created {duration}-day itinerary for {destination}")
+            
+            return {
+                'destination': destination,
+                'duration': duration,
+                'itinerary': itinerary,
+                'budget': budget
+            }
             
         except requests.exceptions.RequestException as e:
-            print(f"OpenTripPlanner API error: {str(e)}")
-            if hasattr(e.response, 'text'):
-                print(f"Error response: {e.response.text}")
+            logger.error(f"❌ Network error while getting travel plan: {str(e)}")
+            raise Exception(f"Network error while getting travel data: {str(e)}")
+        except Exception as e:
+            logger.error(f"❌ Error getting travel plan: {str(e)}")
             raise
-            
-    def _create_basic_prompt(self, params: Dict) -> str:
-        """Create a prompt for generating a basic itinerary"""
-        prompt = f"Create a detailed {params['duration']}-day travel itinerary for {params['destination']}. "
-        
-        if params['interests']:
-            prompt += f"Include activities related to: {', '.join(params['interests'])}. "
-        
-        prompt += f"Budget level: {params['budget']}. Travel style: {params['style']}. "
-        
-        if params['dates']:
-            prompt += f"Travel dates: {params['dates']}. "
-        
-        prompt += "\nFor each day, provide:\n"
-        prompt += "1. A theme for the day\n"
-        prompt += "2. 3-4 main activities with descriptions\n"
-        prompt += "3. Suggested timing for each activity\n"
-        prompt += "4. Location details\n"
-        prompt += "5. Cost estimates\n"
-        prompt += "\nFormat the response as a JSON object with days as keys."
-        
-        return prompt
-        
-    def _create_enhancement_prompt(self, planner_data: Dict, params: Dict) -> str:
-        """Create a prompt for Groq to enhance the itinerary"""
-        prompt = f"Enhance this {params['duration']}-day travel itinerary for {params['destination']}:\n\n"
-        
-        # Add the base itinerary to the prompt
-        prompt += json.dumps(planner_data, indent=2) + "\n\n"
-        
-        prompt += "Please enhance this itinerary by:\n"
-        prompt += "1. Adding local insights and cultural context\n"
-        prompt += "2. Suggesting alternative activities for different weather conditions\n"
-        prompt += "3. Adding specific tips for each activity\n"
-        prompt += "4. Estimating costs and suggesting budget-friendly alternatives\n"
-        prompt += "5. Adding recommended times for each activity\n"
-        
-        if params['interests']:
-            prompt += f"\nFocus on these interests: {', '.join(params['interests'])}\n"
-        
-        prompt += "\nKeep the same basic structure but add your enhancements to each day and activity."
-            
-        if params.get('interests'):
-            interests = ', '.join(params['interests'])
-            prompt += f"The traveler is interested in: {interests}. "
-            
-        if params.get('travelDates'):
-            prompt += f"The trip is planned for {params['travelDates']}. "
-            
-        if params.get('travelStyle'):
-            prompt += f"The preferred travel style is {params['travelStyle']}. "
-            
-        prompt += """Please provide:
-        1. A day-by-day itinerary
-        2. Estimated timings for each activity
-        3. Budget considerations
-        4. Local tips and cultural insights
-        5. Alternative options for bad weather
-        6. Transportation suggestions between locations"""
-            
-        return prompt
-        
-    def _merge_itineraries(self, groq_itinerary: str, planner_data: Dict) -> Dict:
-        """Merge Groq suggestions with OpenTripPlanner data"""
+
+    def get_places(self, destination: str, activity_type: str) -> List[Dict]:
+        """Get places from RapidAPI."""
         try:
-            # Convert Groq's text response to structured data
-            structured_groq = self._parse_groq_response(groq_itinerary)
+            logger.info(f"🌍 Getting places for {destination} with activity type: {activity_type}")
             
-            # Start with the OpenTripPlanner data as base
-            merged = planner_data.copy()
+            # Create headers for RapidAPI
+            headers = {
+                'X-RapidAPI-Key': self.api_key,
+                'X-RapidAPI-Host': 'travel-advisor.p.rapidapi.com'
+            }
             
-            # Enhance each day with Groq's suggestions
-            for day_num in range(len(merged.get('days', []))):
-                planner_day = merged['days'][day_num]
-                groq_day = structured_groq.get('days', [])[day_num] if day_num < len(structured_groq.get('days', [])) else None
+            # Map activity types to interests
+            activity_to_interests = {
+                'adventure': ['adventure sports', 'hiking', 'outdoor activities'],
+                'culture': ['history', 'art', 'museums', 'temples'],
+                'food': ['restaurants', 'food tours', 'cafes'],
+                'shopping': ['shopping', 'markets', 'malls'],
+                'nature': ['parks', 'gardens', 'wildlife'],
+                'relaxing': ['spa', 'beaches', 'leisure'],
+                'mixed': ['sightseeing', 'popular attractions']
+            }
+            
+            # Get interests based on activity type
+            interests = activity_to_interests.get(activity_type.lower(), ['sightseeing'])
+            
+            # Make API request for travel plan
+            payload = {
+                'days': 4,  # Default to 4 days
+                'destination': destination,
+                'interests': interests,
+                'budget': 'medium',  # Default to medium budget
+                'travelMode': 'public transport'  # Default to public transport
+            }
+            
+            logger.info(f"Sending request to RapidAPI with payload: {payload}")
+            
+            response = requests.post(
+                f"{self.base_url}/plan",
+                headers=headers,
+                json=payload
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                places = []
                 
-                if groq_day:
-                    # Add Groq's suggestions to each activity
-                    for activity in planner_day.get('activities', []):
-                        matching_groq_activity = self._find_matching_activity(activity, groq_day.get('activities', []))
-                        if matching_groq_activity:
-                            activity.update({
-                                'local_tips': matching_groq_activity.get('tips', []),
-                                'cultural_context': matching_groq_activity.get('cultural_context', ''),
-                                'weather_alternatives': matching_groq_activity.get('weather_alternatives', []),
-                                'best_time': matching_groq_activity.get('best_time', '')
-                            })
-            
-            # Add overall trip insights from Groq
-            merged.update({
-                'trip_overview': structured_groq.get('overview', ''),
-                'cultural_notes': structured_groq.get('cultural_notes', []),
-                'packing_suggestions': structured_groq.get('packing_suggestions', []),
-                'local_customs': structured_groq.get('local_customs', [])
-            })
-            
-            return merged
-            
-        except Exception as e:
-            print(f"Error merging itineraries: {str(e)}")
-            return planner_data
-            
-    def _parse_groq_response(self, response: str) -> Dict:
-        """Parse Groq's text response into structured data"""
-        try:
-            # Use Groq to structure its own response
-            from .groq_service import GroqService
-            groq = GroqService()
-            
-            prompt = f"""Convert this travel itinerary into a structured JSON format:
-            {response}
-            
-            The JSON should have this structure:
-            {{
-                "overview": "General trip overview",
-                "days": [
-                    {{
-                        "day_number": 1,
-                        "theme": "Day theme",
-                        "activities": [
-                            {{
-                                "name": "Activity name",
-                                "description": "Activity description",
-                                "duration": "Estimated duration",
-                                "cost_estimate": "Cost range",
-                                "tips": ["Local tip 1", "Local tip 2"],
-                                "cultural_context": "Cultural significance",
-                                "weather_alternatives": ["Alternative 1", "Alternative 2"],
-                                "best_time": "Best time to visit"
-                            }}
-                        ]
-                    }}
-                ],
-                "cultural_notes": ["Cultural note 1", "Cultural note 2"],
-                "packing_suggestions": ["Packing item 1", "Packing item 2"],
-                "local_customs": ["Custom 1", "Custom 2"]
-            }}"""
-            
-            structured_response = groq.generate_travel_suggestions(prompt)
-            
-            # Extract the JSON part from the response
-            import re
-            json_match = re.search(r'\{[\s\S]*\}', structured_response)
-            if json_match:
-                import json
-                return json.loads(json_match.group())
+                # Extract places from the itinerary
+                if 'plan' in data:
+                    for day in data['plan']:
+                        for activity in day.get('activities', []):
+                            place = {
+                                'name': activity.get('name', ''),
+                                'description': activity.get('description', ''),
+                                'type': activity.get('type', 'tourist_attraction'),
+                                'rating': activity.get('rating', 4.0)
+                            }
+                            if place['name'] and place not in places:
+                                places.append(place)
+                
+                logger.info(f"📍 Found {len(places)} places in {destination}")
+                return places
             else:
-                return {}
-                
+                logger.warning(f"⚠️ Failed to get places: {response.text}")
+                # Fall back to default places for Bangalore
+                if destination.lower() in ['bangalore', 'bengaluru']:
+                    return [
+                        {
+                            "name": "Lalbagh Botanical Garden",
+                            "description": "Historic garden with diverse plant species and a glass house",
+                            "rating": 4.5,
+                            "type": "park"
+                        },
+                        {
+                            "name": "Cubbon Park",
+                            "description": "Large urban park with walking trails and monuments",
+                            "rating": 4.4,
+                            "type": "park"
+                        },
+                        {
+                            "name": "Bangalore Palace",
+                            "description": "Tudor-style palace with beautiful architecture",
+                            "rating": 4.3,
+                            "type": "tourist_attraction"
+                        },
+                        {
+                            "name": "ISKCON Temple Bangalore",
+                            "description": "Modern Hindu temple complex with cultural center",
+                            "rating": 4.6,
+                            "type": "place_of_worship"
+                        },
+                        {
+                            "name": "UB City",
+                            "description": "Luxury shopping mall and dining destination",
+                            "rating": 4.5,
+                            "type": "shopping_mall"
+                        }
+                    ]
+                return []
+            
         except Exception as e:
-            print(f"Error parsing Groq response: {str(e)}")
-            return {}
+            logger.error(f"❌ Error getting places: {str(e)}")
+            return []
+
+    def _categorize_places(self, places: List[Dict]) -> Dict[str, List[Dict]]:
+        """Group places by category."""
+        categories = {
+            'attractions': [],
+            'restaurants': [],
+            'shopping': [],
+            'entertainment': [],
+            'nature': [],
+            'cultural': []
+        }
+        
+        for place in places:
+            category = place.get('category', '').lower()
             
-    def _find_matching_activity(self, planner_activity: Dict, groq_activities: List[Dict]) -> Optional[Dict]:
-        """Find matching activity from Groq's suggestions"""
-        from difflib import SequenceMatcher
+            if any(word in category for word in ['restaurant', 'cafe', 'food']):
+                categories['restaurants'].append(place)
+            elif any(word in category for word in ['shop', 'mall', 'market']):
+                categories['shopping'].append(place)
+            elif any(word in category for word in ['park', 'garden', 'beach', 'mountain']):
+                categories['nature'].append(place)
+            elif any(word in category for word in ['museum', 'temple', 'church', 'historic']):
+                categories['cultural'].append(place)
+            elif any(word in category for word in ['cinema', 'theater', 'club', 'entertainment']):
+                categories['entertainment'].append(place)
+            else:
+                categories['attractions'].append(place)
         
-        def similarity(a: str, b: str) -> float:
-            return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+        return categories
+
+    def _create_day_activities(self, categorized_places: Dict[str, List[Dict]], activity_type: str, include_food: bool, weather: Dict = None) -> List[Dict]:
+        """Create a list of activities for a day based on preferences and weather."""
+        activities = []
         
-        planner_name = planner_activity.get('name', '')
-        best_match = None
-        best_score = 0
+        # Define time slots
+        time_slots = [
+            ('09:00', 'Morning'),
+            ('12:00', 'Lunch'),
+            ('14:00', 'Afternoon'),
+            ('17:00', 'Evening'),
+            ('19:00', 'Dinner')
+        ]
         
-        for groq_activity in groq_activities:
-            groq_name = groq_activity.get('name', '')
-            score = similarity(planner_name, groq_name)
+        # Weather-based activity selection
+        is_good_weather = True
+        weather_note = ""
+        if weather:
+            condition = weather.get('condition', '').lower()
+            is_good_weather = not any(bad_weather in condition for bad_weather in ['rain', 'storm', 'snow'])
+            if not is_good_weather:
+                weather_note = f"Note: {condition} forecast. Consider indoor activities."
+        
+        # Select places based on activity type and weather
+        for time, period in time_slots:
+            activity = None
             
-            if score > best_score and score > 0.6:  # 60% similarity threshold
-                best_score = score
-                best_match = groq_activity
+            if period in ['Lunch', 'Dinner'] and include_food:
+                if categorized_places['restaurants']:
+                    restaurant = random.choice(categorized_places['restaurants'])
+                    activity = {
+                        'time': time,
+                        'name': restaurant.get('name', ''),
+                        'description': restaurant.get('description', 'Enjoy local cuisine'),
+                        'type': 'food',
+                        'weather_note': ''
+                    }
+            else:
+                # Select category based on activity type and weather
+                if activity_type == 'culture':
+                    preferred_categories = ['cultural', 'attractions']
+                elif activity_type == 'nature':
+                    preferred_categories = ['nature', 'attractions'] if is_good_weather else ['cultural', 'entertainment']
+                elif activity_type == 'shopping':
+                    preferred_categories = ['shopping', 'entertainment']
+                else:  # mixed
+                    preferred_categories = list(categorized_places.keys())
                 
-        return best_match
-        
-    def _structure_groq_response(self, response: str, duration: int) -> Dict:
-        """Structure Groq's response into itinerary format"""
-        structured_data = self._parse_groq_response(response)
-        
-        # Ensure we have the correct number of days
-        while len(structured_data.get('days', [])) < duration:
-            day_number = len(structured_data['days']) + 1
-            structured_data['days'].append({
-                'day_number': day_number,
-                'theme': f'Day {day_number}',
-                'activities': []
-            })
+                # Try to get a place from preferred categories
+                for category in preferred_categories:
+                    if categorized_places[category]:
+                        place = random.choice(categorized_places[category])
+                        activity = {
+                            'time': time,
+                            'name': place.get('name', ''),
+                            'description': place.get('description', ''),
+                            'type': category,
+                            'weather_note': weather_note if not is_good_weather and category == 'nature' else ''
+                        }
+                        break
             
-        # Truncate if we have too many days
-        structured_data['days'] = structured_data['days'][:duration]
+            if activity:
+                activities.append(activity)
         
-        return structured_data
+        return activities

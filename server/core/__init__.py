@@ -1,1 +1,1 @@
-default_app_config = 'core.apps.CoreConfig'
+# Intentionally left empty to avoid import errors

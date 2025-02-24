@@ -1,0 +1,6 @@
+.chat-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a365d 0%, #2d3748 100%);
+  display: flex;
+  flex-direction: column;
+}
