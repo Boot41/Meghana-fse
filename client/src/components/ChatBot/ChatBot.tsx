@@ -9,61 +9,18 @@ interface Message {
   timestamp: Date;
 }
 
-interface TravelPreferences {
-  destination?: string;
-  days?: number;
-  budget?: string;
-  interests?: string[];
-}
-
-interface WeatherOverview {
-  condition: string;
-  temperature: string;
-  recommendation: string;
-}
-
-interface Activity {
-  time: string;
-  description: string;
-  location: string;
-  weather_note?: string;
-  attire?: string;
-}
-
-interface DayPlan {
-  day: number;
-  weather_overview: WeatherOverview;
-  activities: Activity[];
-}
-
-interface TravelPlan {
-  itinerary: DayPlan[];
-  summary?: string;
-  tips: string[];
-  weather_summary: string;
-}
+const INITIAL_MESSAGE = "Hi! I'm your AI travel assistant. Where would you like to go?";
 
 const ChatBot: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [currentState, setCurrentState] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const initChat = async () => {
-      try {
-        const response = await chatApi.startChat();
-        addBotMessage(response.reply);
-        setCurrentState(response.state);
-      } catch (error) {
-        console.error('Error starting chat:', error);
-        addBotMessage("I apologize, but I encountered an error. Please try again.");
-      }
-    };
-
+    // Add initial message when component mounts
     if (messages.length === 0) {
-      initChat();
+      addBotMessage(INITIAL_MESSAGE);
     }
   }, []);
 
@@ -85,11 +42,7 @@ const ChatBot: React.FC = () => {
   };
 
   const addBotMessage = (text: string) => {
-    setIsTyping(true);
-    setTimeout(() => {
-      addMessage(text, 'bot');
-      setIsTyping(false);
-    }, 500);
+    addMessage(text, 'bot');
   };
 
   const handleSendMessage = async () => {
@@ -101,17 +54,26 @@ const ChatBot: React.FC = () => {
 
     try {
       setIsTyping(true);
-      const history = messages.map(msg => ({
-        type: msg.sender === 'user' ? 'user' : 'assistant',
-        content: msg.text
-      }));
-
-      const response = await chatApi.sendMessage(userMessage, currentState, history);
-      setCurrentState(response.state);
-      addBotMessage(response.reply);
+      console.log('Sending message:', userMessage);
+      const response = await chatApi.sendMessage(userMessage);
+      console.log('Got response:', response);
+      
+      if (response.reply) {
+        // Add a small delay to simulate typing
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        addMessage(response.reply, 'bot');
+      }
+      
+      if (response.data?.itinerary) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        addMessage(response.data.itinerary, 'bot');
+      }
+      
     } catch (error) {
       console.error('Error sending message:', error);
-      addBotMessage("I apologize, but I encountered an error while processing your request. Please try again.");
+      addMessage("I apologize, but I encountered an error while processing your request. Please try again.", 'bot');
+    } finally {
+      setIsTyping(false);
     }
   };
 

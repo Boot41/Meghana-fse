@@ -25,6 +25,7 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    "http://127.0.0.1:3000"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -49,6 +50,9 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# For development only
+CORS_ALLOW_ALL_ORIGINS = False  # Only allow specific origins
 
 CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 

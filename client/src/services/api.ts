@@ -6,7 +6,7 @@ console.log('Environment variables:', {
   NODE_ENV: process.env.NODE_ENV
 });
 
-// Hardcode the base URL for now to debug
+// Backend API URL
 const API_BASE_URL = 'http://localhost:8000';
 
 // Create axios instance with default config
@@ -21,14 +21,36 @@ const api = axios.create({
 
 // Add request interceptor for debugging
 api.interceptors.request.use(request => {
-  console.log('Request:', {
+  console.log('🚀 Request:', {
     url: request.url,
     baseURL: request.baseURL,
     method: request.method,
-    data: request.data
+    data: request.data,
+    headers: request.headers
   });
   return request;
 });
+
+// Add response interceptor for debugging
+api.interceptors.response.use(
+  response => {
+    console.log('✅ Response:', {
+      status: response.status,
+      data: response.data,
+      headers: response.headers
+    });
+    return response;
+  },
+  error => {
+    console.error('❌ Error:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      headers: error.response?.headers
+    });
+    throw error;
+  }
+);
 
 // Interface definitions
 interface Activity {
@@ -79,45 +101,24 @@ interface ChatMessage {
 }
 
 interface ChatResponse {
-  message: string;
-  preferences?: TravelPreferences;
-  currentState?: {
-    state: string;
-    data: any;
-  };
-  itinerary?: DayPlan[];
-  summary?: string;
-  tips?: string[];
-  weather_summary?: string;
-  weather?: any;
+  reply: string;
+  state: string;
+  data: any;
+  error?: string;
 }
 
 // Chat API endpoints
 export const chatApi = {
-  startChat: async (): Promise<ChatResponse> => {
-    const response = await api.post('/api/chat/start/');
-    return response.data;
-  },
-
-  sendMessage: async (
-    message: string,
-    state: string = '',
-    history: Array<{type: string, content: string}> = []
-  ): Promise<ChatResponse> => {
-    const response = await api.post('/api/chat/process/', {
-      message,
-      state,
-      history
-    });
-    return response.data;
-  },
-
-  sendItineraryEmail: async (email: string, itinerary: any): Promise<any> => {
-    const response = await api.post('/api/chat/send-email/', {
-      email,
-      itinerary
-    });
-    return response.data;
+  sendMessage: async (message: string): Promise<ChatResponse> => {
+    try {
+      console.log('📤 Sending message:', message);
+      const response = await api.post<ChatResponse>('/api/chat/', { message });
+      console.log('📥 Received response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('💥 Error sending message:', error);
+      throw error;
+    }
   }
 };
 

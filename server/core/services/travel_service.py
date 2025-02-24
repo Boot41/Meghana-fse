@@ -461,6 +461,113 @@ class TravelPlannerService:
             logger.error(f"❌ Error getting places: {str(e)}")
             return []
 
+    def get_attractions(self, destination: str) -> List[Dict]:
+        """Get top attractions for a destination."""
+        try:
+            # First get the location ID
+            location_id = self._get_location_id(destination)
+            if not location_id:
+                logger.error(f"Could not find location ID for {destination}")
+                return []
+
+            # Get attractions
+            url = f"{self.base_url}/attractions/list"
+            params = {
+                'location_id': location_id,
+                'currency': 'USD',
+                'limit': '10',
+                'sort': 'rating'
+            }
+
+            response = requests.get(url, headers=self.headers, params=params)
+            response.raise_for_status()
+            data = response.json().get('data', [])
+
+            # Format attractions
+            attractions = []
+            for item in data:
+                if isinstance(item, dict) and 'name' in item:
+                    attraction = {
+                        'name': item.get('name', ''),
+                        'description': item.get('description', '')[:200] + '...' if item.get('description') else '',
+                        'rating': item.get('rating', 0),
+                        'price_level': item.get('price_level', ''),
+                        'category': item.get('category', {}).get('name', ''),
+                        'address': item.get('address', '')
+                    }
+                    attractions.append(attraction)
+
+            logger.info(f"Found {len(attractions)} attractions for {destination}")
+            return attractions
+
+        except Exception as e:
+            logger.error(f"Error getting attractions: {str(e)}")
+            return []
+
+    def get_restaurants(self, destination: str) -> List[Dict]:
+        """Get top restaurants for a destination."""
+        try:
+            # First get the location ID
+            location_id = self._get_location_id(destination)
+            if not location_id:
+                logger.error(f"Could not find location ID for {destination}")
+                return []
+
+            # Get restaurants
+            url = f"{self.base_url}/restaurants/list"
+            params = {
+                'location_id': location_id,
+                'currency': 'USD',
+                'limit': '10',
+                'sort': 'rating'
+            }
+
+            response = requests.get(url, headers=self.headers, params=params)
+            response.raise_for_status()
+            data = response.json().get('data', [])
+
+            # Format restaurants
+            restaurants = []
+            for item in data:
+                if isinstance(item, dict) and 'name' in item:
+                    restaurant = {
+                        'name': item.get('name', ''),
+                        'cuisine': [cuisine.get('name') for cuisine in item.get('cuisine', [])],
+                        'price_level': item.get('price_level', ''),
+                        'rating': item.get('rating', 0),
+                        'address': item.get('address', ''),
+                        'phone': item.get('phone', '')
+                    }
+                    restaurants.append(restaurant)
+
+            logger.info(f"Found {len(restaurants)} restaurants for {destination}")
+            return restaurants
+
+        except Exception as e:
+            logger.error(f"Error getting restaurants: {str(e)}")
+            return []
+
+    def _get_location_id(self, destination: str) -> Optional[str]:
+        """Get the location ID for a destination."""
+        try:
+            url = f"{self.base_url}/locations/search"
+            params = {
+                'query': destination,
+                'limit': '1'
+            }
+
+            response = requests.get(url, headers=self.headers, params=params)
+            response.raise_for_status()
+            data = response.json().get('data', [])
+
+            if data:
+                return data[0].get('result_object', {}).get('location_id')
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting location ID: {str(e)}")
+            return None
+
     def _categorize_places(self, places: List[Dict]) -> Dict[str, List[Dict]]:
         """Group places by category."""
         categories = {
