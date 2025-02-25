@@ -2,12 +2,12 @@ import axios from 'axios';
 
 // Log environment variables for debugging
 console.log('Environment variables:', {
-  REACT_APP_API_URL: process.env.REACT_APP_API_URL,
-  NODE_ENV: process.env.NODE_ENV
+  VITE_APP_API_URL: import.meta.env.VITE_APP_API_URL,
+  NODE_ENV: import.meta.env.MODE
 });
 
 // Backend API URL
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_APP_API_URL || 'http://localhost:8000';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -16,7 +16,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  withCredentials: false
+  withCredentials: false  // Disable credentials for now
 });
 
 // Add request interceptor for debugging
@@ -29,6 +29,9 @@ api.interceptors.request.use(request => {
     headers: request.headers
   });
   return request;
+}, error => {
+  console.error('❌ Request Error:', error);
+  return Promise.reject(error);
 });
 
 // Add response interceptor for debugging
@@ -42,13 +45,20 @@ api.interceptors.response.use(
     return response;
   },
   error => {
-    console.error('❌ Error:', {
+    // Handle network errors
+    if (!error.response) {
+      console.error('❌ Network Error:', error.message);
+      return Promise.reject(new Error('Network error. Please check your connection.'));
+    }
+
+    // Handle API errors
+    console.error('❌ Response Error:', {
       message: error.message,
       response: error.response?.data,
       status: error.response?.status,
       headers: error.response?.headers
     });
-    throw error;
+    return Promise.reject(error);
   }
 );
 
@@ -101,22 +111,37 @@ interface ChatMessage {
 }
 
 interface ChatResponse {
-  reply: string;
-  state: string;
-  data: any;
+  message: string;
+  currentState: {
+    state: string;
+    data: any;
+  };
+  preferences: any;
   error?: string;
 }
 
 // Chat API endpoints
 export const chatApi = {
-  sendMessage: async (message: string): Promise<ChatResponse> => {
+  startChat: async (): Promise<ChatResponse> => {
     try {
-      console.log('📤 Sending message:', message);
-      const response = await api.post<ChatResponse>('/api/chat/', { message });
-      console.log('📥 Received response:', response.data);
+      const response = await api.post('/api/chat/start/');
       return response.data;
     } catch (error) {
-      console.error('💥 Error sending message:', error);
+      console.error('Error in startChat:', error);
+      throw error;
+    }
+  },
+
+  sendMessage: async (message: string, preferences: any = {}, currentState: any = {}): Promise<ChatResponse> => {
+    try {
+      const response = await api.post('/api/chat/process/', {
+        message,
+        preferences,
+        currentState
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in sendMessage:', error);
       throw error;
     }
   }

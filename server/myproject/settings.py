@@ -23,12 +23,12 @@ DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # CORS settings
+CORS_ORIGIN_ALLOW_ALL = False
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "http://127.0.0.1:3000"
 ]
-
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_CREDENTIALS = False
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
 
 CORS_ALLOW_METHODS = [
     'DELETE',
@@ -50,11 +50,6 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
-
-# For development only
-CORS_ALLOW_ALL_ORIGINS = False  # Only allow specific origins
-
-CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 
 # API Keys
 TRAVEL_API_KEY = os.getenv('TRAVEL_API_KEY')
@@ -83,10 +78,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # Make sure this is at the top
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -122,10 +117,20 @@ DATABASES = {
         'NAME': 'travel_app',
         'ENFORCE_SCHEMA': False,
         'CLIENT': {
-            'host': 'localhost',
+            'host': 'mongo',  # Use the service name from docker-compose
             'port': 27017,
             'username': '',
             'password': '',
+            'authSource': 'admin',
+        },
+        'LOGGING': {
+            'version': 1,
+            'loggers': {
+                'djongo': {
+                    'level': 'DEBUG',
+                    'propagate': False,
+                }
+            }
         }
     }
 }

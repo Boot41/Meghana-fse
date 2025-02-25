@@ -11,10 +11,12 @@ const ChatPage: React.FC = () => {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="h-screen flex"
+      className="flex flex-col min-h-screen bg-gray-100"
     >
-      <div className="flex-1">
-        <ChatBot />
+      <div className="flex-1 p-4 md:p-8">
+        <div className="max-w-4xl mx-auto h-[80vh] bg-white rounded-lg shadow-lg overflow-hidden">
+          <ChatBot />
+        </div>
       </div>
     </motion.div>
   );

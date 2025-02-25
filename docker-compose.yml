@@ -16,6 +16,12 @@ services:
     environment:
       - MONGO_URI=mongodb://mongo:27017/travel_app
       - PYTHONUNBUFFERED=1
+      - GROQ_API_KEY=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
+      - RAPID_API_KEY=611be66318mshc8ee99cec2c3c02p14f3f9jsn11d0d71360d6
+      - WEATHER_API_KEY=e74ef813f14f4b1281c173442252202
+      - DJANGO_SECRET_KEY=django-insecure-your-secret-key-here
+      - DEBUG=True
+      - ALLOWED_HOSTS=localhost,127.0.0.1
     depends_on:
       - mongo
 

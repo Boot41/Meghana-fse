@@ -15,7 +15,15 @@ logger = logging.getLogger(__name__)
 class GroqService:
     def __init__(self):
         # Initialize API clients
-        self.client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+        api_key = os.getenv('GROQ_API_KEY')
+        if not api_key:
+            raise ValueError("GROQ_API_KEY environment variable is not set")
+            
+        self.client = Groq(
+            api_key=api_key,
+            base_url="https://api.groq.com/openai/v1"
+        )
+        
         self.weather_service = WeatherService()
         self.travel_service = TravelPlannerService(os.getenv('RAPID_API_KEY'))  # Fix the environment variable name
         
@@ -137,7 +145,8 @@ Format the response as a clear, easy-to-read itinerary with daily schedules.
                 return {
                     "reply": itinerary_data["itinerary"],
                     "state": self.conversation_state,
-                    "data": itinerary_data
+                    "data": itinerary_data,
+                    "preferences": self.current_preferences
                 }
             else:
                 # Get next question
@@ -145,7 +154,8 @@ Format the response as a clear, easy-to-read itinerary with daily schedules.
                 return {
                     "reply": next_question,
                     "state": self.conversation_state,
-                    "data": {}
+                    "data": {},
+                    "preferences": self.current_preferences
                 }
 
         except Exception as e:
@@ -153,7 +163,8 @@ Format the response as a clear, easy-to-read itinerary with daily schedules.
             return {
                 "reply": "I apologize, but I encountered an error. Please try again.",
                 "state": "error",
-                "data": {}
+                "data": {},
+                "preferences": self.current_preferences
             }
 
     def _update_preferences(self, message: str) -> Dict:

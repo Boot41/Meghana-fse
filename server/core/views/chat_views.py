@@ -1,119 +1,123 @@
-import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+import json
 from ..services.groq_service import GroqService
 from ..services.weather_service import WeatherService
 from ..services.email_service import EmailService
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def add_cors_headers(response):
+    """Add CORS headers to response."""
+    response["Access-Control-Allow-Origin"] = "*"
+    response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
 
 @csrf_exempt
-@require_http_methods(["POST"])
+@require_http_methods(["POST", "OPTIONS"])
 def start_chat(request):
-    """Initialize a new chat session."""
-    try:
-        # Initialize a new GroqService for this session
-        groq_service = GroqService()
+    """Start a new chat session."""
+    if request.method == "OPTIONS":
+        response = JsonResponse({})
+        return add_cors_headers(response)
         
-        return JsonResponse({
-            "message": "Hi! I'm your AI travel assistant. Let's plan your perfect trip! Where would you like to go?",
+    try:
+        logger.info("\nStarting new chat session")
+        
+        response = JsonResponse({
+            "message": "Hi! I'm your AI travel assistant. Where would you like to go?",
             "currentState": {
-                "state": groq_service.conversation_state,
+                "state": "asking_destination",
                 "data": {}
-            }
+            },
+            "preferences": {}
         })
+        return add_cors_headers(response)
+
     except Exception as e:
-        print(f"Error starting chat: {str(e)}")
-        return JsonResponse({
-            "message": "I apologize, but I couldn't start the chat. Please try again.",
+        logger.error(f"Error starting chat: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        response = JsonResponse({
+            "message": "I apologize, but I encountered an error. Please try again.",
             "error": str(e)
         }, status=500)
+        return add_cors_headers(response)
 
 @csrf_exempt
-@require_http_methods(["POST"])
+@require_http_methods(["POST", "OPTIONS"])
 def process_chat(request):
-    """Process chat messages and generate responses with travel recommendations."""
+    if request.method == "OPTIONS":
+        response = JsonResponse({})
+        return add_cors_headers(response)
+        
     try:
         data = json.loads(request.body)
         message = data.get('message', '')
         current_preferences = data.get('preferences', {})
         current_state = data.get('currentState', {})
         
-        print(f"\nProcessing chat message:")
-        print(f"Message: {message}")
-        print(f"Current state: {current_state}")
-        print(f"Current preferences: {current_preferences}")
+        logger.info(f"\nProcessing chat message:")
+        logger.info(f"Message: {message}")
+        logger.info(f"Current state: {current_state}")
+        logger.info(f"Current preferences: {current_preferences}")
         
         # Initialize services
         groq_service = GroqService()
-        weather_service = WeatherService()
-
-        # Extract or update preferences from the message
-        result = groq_service.extract_preferences(message, current_preferences)
         
-        print(f"Extract preferences result: {result}")
+        # Set the current state and preferences from the request
+        state = current_state.get('state', 'asking_destination')
+        groq_service.conversation_state = state
+        groq_service.current_preferences = current_preferences or {}
         
-        # Ensure we got a valid result
-        if not result or not isinstance(result, dict):
-            print("Error: Invalid response format")
-            return JsonResponse({
-                "message": "I apologize, but I couldn't process your message. Please try again.",
-                "error": "Invalid response format"
-            }, status=400)
-
-        # Get the components from the result
-        preferences = result.get('preferences', {})
-        message = result.get('message', '')
-        current_state = result.get('current_state', '')
-        itinerary = result.get('itinerary', [])
-        tips = result.get('tips', [])
-        weather_summary = result.get('weather_summary', '')
-
-        # Return the response
-        response_data = {
-            "message": message,
-            "preferences": preferences,
+        # Process the message
+        result = groq_service.process_message(message)
+        
+        logger.info(f"Processing result: {result}")
+        
+        response = JsonResponse({
+            "message": result["reply"],
             "currentState": {
-                "state": current_state,
-                "data": preferences
-            }
-        }
+                "state": result["state"],
+                "data": result.get("data", {})
+            },
+            "preferences": result["preferences"]
+        })
+        return add_cors_headers(response)
 
-        # Add itinerary data if present
-        if itinerary or tips or weather_summary:
-            response_data.update({
-                "itinerary": itinerary,
-                "tips": tips,
-                "weather_summary": weather_summary
-            })
-
-        return JsonResponse(response_data)
-
-    except json.JSONDecodeError:
-        print("Error: Invalid JSON request")
-        return JsonResponse({
-            "message": "Invalid request format. Please provide valid JSON.",
-            "error": "Invalid JSON"
-        }, status=400)
     except Exception as e:
-        print(f"Error processing chat: {str(e)}")
-        return JsonResponse({
+        logger.error(f"Error processing chat: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        response = JsonResponse({
             "message": "I apologize, but I encountered an error. Please try again.",
             "error": str(e)
         }, status=500)
+        return add_cors_headers(response)
 
 @csrf_exempt
-@require_http_methods(["POST"])
+@require_http_methods(["POST", "OPTIONS"])
 def send_itinerary_email(request):
     """Send itinerary as PDF to user's email."""
+    if request.method == "OPTIONS":
+        response = JsonResponse({})
+        return add_cors_headers(response)
+        
     try:
         data = json.loads(request.body)
         email = data.get('email')
         itinerary_data = data.get('itinerary')
         
         if not email or not itinerary_data:
-            return JsonResponse({
+            response = JsonResponse({
                 'error': 'Email and itinerary data are required'
             }, status=400)
+            return add_cors_headers(response)
             
         # Initialize email service
         email_service = EmailService()
@@ -122,16 +126,19 @@ def send_itinerary_email(request):
         success = email_service.send_itinerary_email(email, itinerary_data)
         
         if success:
-            return JsonResponse({
+            response = JsonResponse({
                 'message': 'Itinerary sent successfully!'
             })
         else:
-            return JsonResponse({
+            response = JsonResponse({
                 'error': 'Failed to send email'
             }, status=500)
             
+        return add_cors_headers(response)
+            
     except Exception as e:
-        print(f"Error in send_itinerary_email: {str(e)}")
-        return JsonResponse({
+        logger.error(f"Error in send_itinerary_email: {str(e)}")
+        response = JsonResponse({
             'error': 'Internal server error'
         }, status=500)
+        return add_cors_headers(response)

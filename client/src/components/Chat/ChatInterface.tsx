@@ -21,13 +21,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onItineraryGenerated, ini
     state: 'initial',
     data: {}
   });
+  const [preferences, setPreferences] = useState<any>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const initChat = async () => {
       try {
         const response = await chatApi.startChat();
-        addBotMessage(initialMessage || response.data.message);
+        addBotMessage(initialMessage || response.message);
+        if (response.currentState) {
+          setCurrentState(response.currentState);
+        }
+        if (response.preferences) {
+          setPreferences(response.preferences);
+        }
       } catch (error) {
         console.error('Error starting chat:', error);
         addBotMessage(initialMessage || "Hi! Where would you like to go?");
@@ -68,17 +75,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onItineraryGenerated, ini
     setIsTyping(true);
 
     try {
-      const response = await chatApi.sendMessage(userMessage, currentState.data);
-      const data = response.data;
+      const response = await chatApi.sendMessage(userMessage, preferences, currentState);
       
-      await addBotMessage(data.message);
+      await addBotMessage(response.message);
       
-      if (data.currentState) {
-        setCurrentState(data.currentState);
+      if (response.currentState) {
+        setCurrentState(response.currentState);
+      }
+      
+      if (response.preferences) {
+        setPreferences(response.preferences);
       }
 
-      if (data.itinerary && onItineraryGenerated) {
-        onItineraryGenerated(data.itinerary);
+      if (response.currentState?.data?.itinerary && onItineraryGenerated) {
+        onItineraryGenerated(response.currentState.data.itinerary);
       }
     } catch (error: any) {
       console.error('Error:', error);
@@ -102,41 +112,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onItineraryGenerated, ini
   return (
     <div className="chat-interface">
       <div className="messages">
-        {messages.map((message, index) => (
-          <div key={index} className={`message ${message.sender}`}>
-            <div className="message-content">
-              {message.text}
-            </div>
-            <div className="message-timestamp">
-              {formatTimestamp(message.timestamp)}
-            </div>
+        {messages.map((msg, index) => (
+          <div key={index} className={`message ${msg.sender}`}>
+            <div className="message-content">{msg.text}</div>
+            <div className="message-timestamp">{formatTimestamp(msg.timestamp)}</div>
           </div>
         ))}
         {isTyping && (
           <div className="message bot">
-            <div className="message-content">
-              <div className="typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
+            <div className="typing-indicator">
+              <span></span>
+              <span></span>
+              <span></span>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
-      
-      <div className="input-container">
+      <div className="input-area">
         <textarea
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyPress={handleKeyPress}
           placeholder="Type your message..."
           rows={1}
-          autoFocus
         />
         <button onClick={handleSend} disabled={!inputText.trim() || isTyping}>
-          {isTyping ? 'Thinking...' : 'Send'}
+          Send
         </button>
       </div>
     </div>

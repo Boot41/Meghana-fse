@@ -363,103 +363,108 @@ class TravelPlannerService:
         try:
             logger.info(f"🌍 Getting places for {destination} with activity type: {activity_type}")
             
-            # Create headers for RapidAPI
-            headers = {
-                'X-RapidAPI-Key': self.api_key,
-                'X-RapidAPI-Host': 'travel-advisor.p.rapidapi.com'
-            }
-            
-            # Map activity types to interests
-            activity_to_interests = {
-                'adventure': ['adventure sports', 'hiking', 'outdoor activities'],
-                'culture': ['history', 'art', 'museums', 'temples'],
-                'food': ['restaurants', 'food tours', 'cafes'],
-                'shopping': ['shopping', 'markets', 'malls'],
-                'nature': ['parks', 'gardens', 'wildlife'],
-                'relaxing': ['spa', 'beaches', 'leisure'],
-                'mixed': ['sightseeing', 'popular attractions']
-            }
-            
-            # Get interests based on activity type
-            interests = activity_to_interests.get(activity_type.lower(), ['sightseeing'])
-            
-            # Make API request for travel plan
-            payload = {
-                'days': 4,  # Default to 4 days
-                'destination': destination,
-                'interests': interests,
-                'budget': 'medium',  # Default to medium budget
-                'travelMode': 'public transport'  # Default to public transport
-            }
-            
-            logger.info(f"Sending request to RapidAPI with payload: {payload}")
-            
-            response = requests.post(
-                f"{self.base_url}/plan",
-                headers=headers,
-                json=payload
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                places = []
-                
-                # Extract places from the itinerary
-                if 'plan' in data:
-                    for day in data['plan']:
-                        for activity in day.get('activities', []):
-                            place = {
-                                'name': activity.get('name', ''),
-                                'description': activity.get('description', ''),
-                                'type': activity.get('type', 'tourist_attraction'),
-                                'rating': activity.get('rating', 4.0)
-                            }
-                            if place['name'] and place not in places:
-                                places.append(place)
-                
-                logger.info(f"📍 Found {len(places)} places in {destination}")
-                return places
-            else:
-                logger.warning(f"⚠️ Failed to get places: {response.text}")
-                # Fall back to default places for Bangalore
-                if destination.lower() in ['bangalore', 'bengaluru']:
-                    return [
-                        {
-                            "name": "Lalbagh Botanical Garden",
-                            "description": "Historic garden with diverse plant species and a glass house",
-                            "rating": 4.5,
-                            "type": "park"
-                        },
-                        {
-                            "name": "Cubbon Park",
-                            "description": "Large urban park with walking trails and monuments",
-                            "rating": 4.4,
-                            "type": "park"
-                        },
-                        {
-                            "name": "Bangalore Palace",
-                            "description": "Tudor-style palace with beautiful architecture",
-                            "rating": 4.3,
-                            "type": "tourist_attraction"
-                        },
-                        {
-                            "name": "ISKCON Temple Bangalore",
-                            "description": "Modern Hindu temple complex with cultural center",
-                            "rating": 4.6,
-                            "type": "place_of_worship"
-                        },
-                        {
-                            "name": "UB City",
-                            "description": "Luxury shopping mall and dining destination",
-                            "rating": 4.5,
-                            "type": "shopping_mall"
-                        }
-                    ]
+            # First get the location ID
+            location_id = self._get_location_id(destination)
+            if not location_id:
+                logger.error(f"Could not find location ID for {destination}")
                 return []
+
+            # Get places
+            url = f"{self.base_url}/locations/v2/list-by-latlng"
+            params = {
+                'location_id': location_id,
+                'limit': '30',
+                'currency': 'USD',
+                'lang': 'en'
+            }
+
+            response = requests.get(url, headers=self.headers, params=params)
+            response.raise_for_status()
+            data = response.json().get('data', [])
+
+            # Format places
+            places = []
+            for item in data:
+                if isinstance(item, dict) and 'name' in item:
+                    place = {
+                        'name': item.get('name', ''),
+                        'description': item.get('description', '')[:200] + '...' if item.get('description') else '',
+                        'rating': item.get('rating', 0),
+                        'price_level': item.get('price_level', ''),
+                        'category': item.get('category', {}).get('name', ''),
+                        'address': item.get('address', '')
+                    }
+                    places.append(place)
+
+            logger.info(f"Found {len(places)} places for {destination}")
+            return places
             
         except Exception as e:
             logger.error(f"❌ Error getting places: {str(e)}")
             return []
+
+    def generate_itinerary(self, destination: str, days: int, budget: int, interests: List[str]) -> Dict:
+        """Generate a travel itinerary."""
+        try:
+            # Get places
+            places = self.get_places(destination, "attractions")
+            
+            # Create daily itinerary
+            itinerary = []
+            places_per_day = len(places) // days if days > 0 else len(places)
+            
+            for day in range(days):
+                day_places = places[day * places_per_day : (day + 1) * places_per_day]
+                activities = [place['name'] for place in day_places]
+                
+                itinerary.append({
+                    'day': day + 1,
+                    'activities': activities
+                })
+            
+            return {
+                'destination': destination,
+                'days': days,
+                'budget': budget,
+                'interests': interests,
+                'itinerary': itinerary
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating itinerary: {str(e)}")
+            return None
+
+    def fetch_destination_info(self, destination: str) -> Dict:
+        """Fetch information about a destination."""
+        try:
+            # Get location ID
+            location_id = self._get_location_id(destination)
+            if not location_id:
+                return None
+            
+            # Get destination details
+            url = f"{self.base_url}/locations/v2/get-details"
+            params = {
+                'location_id': location_id,
+                'currency': 'USD',
+                'lang': 'en'
+            }
+            
+            response = requests.get(url, headers=self.headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            return {
+                'name': data.get('name', ''),
+                'description': data.get('description', ''),
+                'num_reviews': data.get('num_reviews', 0),
+                'rating': data.get('rating', 0),
+                'location_string': data.get('location_string', '')
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching destination info: {str(e)}")
+            return None
 
     def get_attractions(self, destination: str) -> List[Dict]:
         """Get top attractions for a destination."""

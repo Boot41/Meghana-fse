@@ -6,21 +6,16 @@ from typing import Dict, List
 class WeatherService:
     def __init__(self):
         self.api_key = os.getenv('WEATHER_API_KEY')
+        if not self.api_key:
+            raise ValueError("Weather API key not found")
         self.base_url = 'http://api.weatherapi.com/v1'
 
     def get_forecast(self, city: str, days: int) -> List[Dict]:
         """Get weather forecast for a city for the specified number of days."""
         try:
-            # Get the API key from environment
-            api_key = os.getenv('WEATHER_API_KEY')
-            if not api_key:
-                print("Weather API key not found")
-                return None
-
-            # Make the API request
-            url = f"https://api.weatherapi.com/v1/forecast.json"
+            url = f"{self.base_url}/forecast.json"
             params = {
-                'key': api_key,
+                'key': self.api_key,
                 'q': city,
                 'days': days,
                 'aqi': 'no'
@@ -29,28 +24,26 @@ class WeatherService:
             print(f"Fetching weather for {city} for {days} days...")
             response = requests.get(url, params=params)
             response.raise_for_status()
+            
             data = response.json()
+            if 'forecast' not in data:
+                print("No forecast data found")
+                return []
 
-            # Extract and format the forecast data
-            forecast_days = data.get('forecast', {}).get('forecastday', [])
-            weather_data = []
-
-            for i, day in enumerate(forecast_days, 1):
-                weather_data.append({
-                    'day': i,
-                    'date': day['date'],
-                    'condition': day['day']['condition']['text'],
+            forecast = []
+            for day in data['forecast']['forecastday']:
+                forecast.append({
+                    'day': day['date'],
                     'temp_c': day['day']['avgtemp_c'],
-                    'temp_f': (day['day']['avgtemp_c'] * 9/5) + 32,
+                    'temp_f': day['day']['avgtemp_f'],
+                    'condition': day['day']['condition']['text'],
                     'chance_of_rain': day['day']['daily_chance_of_rain']
                 })
+            return forecast
 
-            print(f"Successfully fetched weather data for {city}")
-            return weather_data
-
-        except Exception as e:
-            print(f"Error fetching weather data: {str(e)}")
-            return None
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching weather: {str(e)}")
+            return []
 
     def get_weather_summary(self, forecast: List[Dict]) -> str:
         """Generate a natural language summary of the weather forecast."""
@@ -59,7 +52,7 @@ class WeatherService:
 
         summary_parts = []
         for day in forecast:
-            date = datetime.strptime(day['date'], '%Y-%m-%d').strftime('%A, %B %d')
+            date = datetime.strptime(day['day'], '%Y-%m-%d').strftime('%A, %B %d')
             summary_parts.append(
                 f"{date}: {day['condition']}, "
                 f"temperature {day['temp_c']:.0f}°C ({day['temp_f']:.0f}°F)"
