@@ -2,30 +2,20 @@ FROM python:3.9
 
 WORKDIR /app
 
+# Install system dependencies for pdfkit
+RUN apt-get update && apt-get install -y \
+    wkhtmltopdf \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 COPY .env .
 
+# Install Python dependencies
 RUN pip install -r requirements.txt
+RUN pip install pdfkit
 
 COPY . .
 
 EXPOSE 8000
 
-# Create a script to run migrations and start server
-RUN echo '#!/bin/bash\n\
-set -ex\n\
-echo "Current directory:"\n\
-pwd\n\
-echo "Directory contents:"\n\
-ls -la\n\
-echo "Making migrations..."\n\
-python manage.py makemigrations core\n\
-echo "Running migrations..."\n\
-python manage.py migrate\n\
-echo "Starting server with gunicorn..."\n\
-exec gunicorn myproject.wsgi:application --bind 0.0.0.0:8000 --log-level debug\n'\
-> /app/start.sh
-
-RUN chmod +x /app/start.sh
-
-CMD ["/bin/bash", "/app/start.sh"]
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
